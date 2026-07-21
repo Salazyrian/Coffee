@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Круговорот кофе</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Caveat:wght@600;700&family=Rubik:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --espresso:#241a13;
+    --espresso-2:#2e2119;
+    --crema:#f0e2cb;
+    --crema-dim:#c9b394;
+    --latte:#c89f76;
+    --copper:#d98e4a;
+    --milk:#fff8ec;
+    --line:#4a3728;
+    --danger:#c96a5a;
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html,body{height:100%}
+  body{
+    background:
+      radial-gradient(1200px 700px at 50% -10%, #3a2a1f 0%, var(--espresso) 60%),
+      var(--espresso);
+    color:var(--crema);
+    font-family:'Rubik',system-ui,sans-serif;
+    min-height:100vh;
+    display:flex;flex-direction:column;align-items:center;
+    padding:20px 16px 48px;
+  }
+  header{width:100%;max-width:960px;text-align:center;margin-bottom:6px}
+  h1{
+    font-family:'Caveat',cursive;
+    font-size:clamp(38px,7vw,58px);
+    font-weight:700;color:var(--milk);letter-spacing:.5px;line-height:1;
+  }
+  h1 .bean{color:var(--copper)}
+  .sub{color:var(--crema-dim);font-size:14px;margin-top:4px}
+  #syncDot{
+    display:inline-block;width:9px;height:9px;border-radius:50%;
+    margin-left:6px;vertical-align:middle;background:var(--crema-dim);
+  }
+  #syncDot[data-s="ok"]{background:#7bb26a}
+  #syncDot[data-s="busy"]{background:var(--latte)}
+  #syncDot[data-s="err"]{background:var(--danger)}
+
+  /* кнопка «как это работает» */
+  .help-wrap{position:relative;display:inline-block;margin-left:8px;vertical-align:middle}
+  .help-btn{
+    width:22px;height:22px;border-radius:50%;border:1.5px solid var(--line);
+    background:transparent;color:var(--crema-dim);font-family:'Rubik',sans-serif;
+    font-size:13px;font-weight:600;cursor:pointer;line-height:1;padding:0;
+  }
+  .help-btn:hover{border-color:var(--latte);color:var(--milk)}
+  .help-pop{
+    position:absolute;top:calc(100% + 10px);left:50%;transform:translateX(-50%);
+    width:min(320px, 86vw);text-align:left;z-index:20;
+    background:var(--milk);color:var(--espresso);border-radius:14px;
+    padding:14px 16px;box-shadow:0 10px 30px rgba(0,0,0,.5);
+    opacity:0;visibility:hidden;transition:opacity .15s;
+  }
+  .help-pop::before{ /* мостик, чтобы ховер не обрывался в зазоре */
+    content:'';position:absolute;top:-10px;left:0;right:0;height:10px;
+  }
+  .help-wrap:hover .help-pop,
+  .help-wrap:focus-within .help-pop,
+  .help-pop.open{opacity:1;visibility:visible}
+  .hp-title{font-family:'Caveat',cursive;font-size:24px;font-weight:700;margin-bottom:8px}
+  .help-pop ul{list-style:none;display:flex;flex-direction:column;gap:8px;font-size:13.5px;line-height:1.45}
+  .help-pop li b{font-weight:600}
+  .hp-rule{
+    margin-top:10px;padding-top:8px;border-top:1px dashed #d8c8ab;
+    font-size:13px;font-style:italic;color:#6b4f36;
+  }
+
+  .stage{width:100%;max-width:640px;position:relative}
+  svg{width:100%;height:auto;display:block;user-select:none}
+
+  /* узлы-люди */
+  .node{cursor:default}
+  .node text.name{
+    font-family:'Caveat',cursive;font-size:26px;font-weight:700;
+    fill:var(--milk);text-anchor:middle;
+  }
+  .node .cupbody{fill:var(--espresso-2);stroke:var(--latte);stroke-width:2}
+  .node .cuplid{fill:var(--latte)}
+  .node text.initials{
+    font-family:'Rubik',sans-serif;font-size:16px;font-weight:600;
+    fill:var(--crema);text-anchor:middle;
+  }
+
+  /* стрелки-долги */
+  .edge path.flow{
+    fill:none;stroke:var(--copper);stroke-linecap:round;cursor:pointer;
+  }
+  .edge path.hit{fill:none;stroke:transparent;stroke-width:26;cursor:pointer}
+  .edge:hover path.flow{stroke:var(--milk)}
+  .edge .badge-cup{fill:var(--copper);cursor:pointer}
+  .edge:hover .badge-cup{fill:var(--milk)}
+  .edge .badge-lid{fill:var(--espresso)}
+  .edge text.count{
+    font-family:'Rubik',sans-serif;font-weight:600;fill:var(--espresso);
+    text-anchor:middle;cursor:pointer;
+  }
+  @media (prefers-reduced-motion: no-preference){
+    .edge path.flow{stroke-dasharray:6 10;animation:flow 1.6s linear infinite}
+    @keyframes flow{to{stroke-dashoffset:-16}}
+  }
+
+  .empty-hint{
+    position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
+    pointer-events:none;
+  }
+  .empty-hint span{
+    font-family:'Caveat',cursive;font-size:28px;color:var(--crema-dim);
+    background:rgba(36,26,19,.7);padding:8px 18px;border-radius:12px;
+  }
+
+  /* панель действий */
+  .panel{
+    width:100%;max-width:640px;margin-top:8px;
+    background:var(--espresso-2);
+    border:1px solid var(--line);border-radius:16px;
+    padding:18px;
+  }
+  .panel h2{
+    font-family:'Caveat',cursive;font-size:28px;color:var(--milk);
+    font-weight:700;margin-bottom:12px;
+  }
+  .row{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px}
+  .row .lbl{font-size:14px;color:var(--crema-dim);width:100%}
+  .chip{
+    border:1.5px solid var(--line);background:transparent;color:var(--crema);
+    border-radius:999px;padding:8px 16px;font-family:'Rubik',sans-serif;
+    font-size:15px;cursor:pointer;transition:background .15s,border-color .15s;
+  }
+  .chip:hover{border-color:var(--latte)}
+  .chip.on-buyer{background:var(--copper);border-color:var(--copper);color:var(--espresso);font-weight:600}
+  .chip.on-drinker{background:var(--crema);border-color:var(--crema);color:var(--espresso);font-weight:600}
+  .chip:disabled{opacity:.35;cursor:default}
+  .btn{
+    border:none;border-radius:12px;padding:12px 20px;font-family:'Rubik',sans-serif;
+    font-size:15px;font-weight:600;cursor:pointer;
+  }
+  .btn-main{background:var(--copper);color:var(--espresso);width:100%}
+  .btn-main:hover{background:var(--milk)}
+  .btn-main:disabled{opacity:.4;cursor:default}
+  .btn-ghost{background:transparent;color:var(--crema-dim);border:1.5px solid var(--line)}
+  .btn-ghost:hover{color:var(--crema);border-color:var(--latte)}
+  .btn-danger{background:transparent;color:var(--danger);border:1.5px solid var(--danger)}
+  .btn-danger:hover{background:var(--danger);color:var(--espresso)}
+
+  /* список долгов */
+  .debts{width:100%;max-width:640px;margin-top:16px}
+  .debts h2{font-family:'Caveat',cursive;font-size:26px;color:var(--milk);font-weight:700;margin-bottom:8px}
+  .debt-line{
+    display:flex;align-items:center;gap:10px;
+    padding:10px 4px;border-bottom:1px dashed var(--line);font-size:15px;
+  }
+  .debt-line .who{flex:1}
+  .debt-line .who b{color:var(--milk);font-weight:600}
+  .debt-line .cups{color:var(--copper);font-weight:600;white-space:nowrap}
+  .mini{
+    border:1.5px solid var(--line);background:transparent;color:var(--crema);
+    border-radius:8px;width:34px;height:34px;font-size:16px;cursor:pointer;
+  }
+  .mini:hover{border-color:var(--latte)}
+  .no-debts{color:var(--crema-dim);font-size:14px;padding:8px 4px}
+
+  /* люди */
+  .people-manage{width:100%;max-width:640px;margin-top:16px}
+  .people-manage h2{font-family:'Caveat',cursive;font-size:26px;color:var(--milk);font-weight:700;margin-bottom:8px}
+  .add-row{display:flex;gap:8px}
+  .add-row input{
+    flex:1;background:var(--espresso-2);border:1.5px solid var(--line);
+    border-radius:12px;padding:11px 14px;color:var(--crema);
+    font-family:'Rubik',sans-serif;font-size:15px;
+  }
+  .add-row input:focus{outline:none;border-color:var(--latte)}
+  .add-row input::placeholder{color:var(--crema-dim)}
+  .people-list{display:flex;flex-wrap:wrap;gap:8px;margin-top:10px}
+  .person-tag{
+    display:inline-flex;align-items:center;gap:6px;
+    border:1.5px solid var(--line);border-radius:999px;padding:6px 8px 6px 14px;
+    font-size:14px;color:var(--crema);
+  }
+  .person-tag button{
+    border:none;background:transparent;color:var(--crema-dim);cursor:pointer;
+    font-size:15px;line-height:1;padding:2px 4px;border-radius:50%;
+  }
+  .person-tag button:hover{color:var(--danger)}
+
+  /* попап по стрелке */
+  .popover{
+    position:absolute;z-index:10;
+    background:var(--milk);color:var(--espresso);border-radius:14px;
+    padding:14px;min-width:230px;box-shadow:0 10px 30px rgba(0,0,0,.5);
+  }
+  .popover .pv-title{font-weight:600;font-size:14px;margin-bottom:10px}
+  .popover .pv-btns{display:flex;flex-direction:column;gap:6px}
+  .popover .pv-btns button{
+    border:none;border-radius:9px;padding:9px 12px;font-family:'Rubik',sans-serif;
+    font-size:14px;font-weight:500;cursor:pointer;text-align:left;background:#efe3cf;
+  }
+  .popover .pv-btns button:hover{background:var(--copper);color:var(--espresso)}
+  .popover .pv-btns button.zero:hover{background:var(--danger);color:var(--milk)}
+
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);
+    background:var(--milk);color:var(--espresso);padding:10px 20px;border-radius:999px;
+    font-size:14px;font-weight:500;opacity:0;pointer-events:none;
+    transition:opacity .25s,transform .25s;
+  }
+  .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+  button:focus-visible,input:focus-visible{outline:2px solid var(--copper);outline-offset:2px}
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Круговорот кофе <span class="bean">☕</span></h1>
+  <div class="sub">стрелка идёт от того, кто должен, к тому, кому должен <span id="syncDot" data-s="busy" title="Статус синхронизации"></span>
+    <span class="help-wrap">
+      <button class="help-btn" id="helpBtn" aria-label="Как это работает" aria-expanded="false">?</button>
+      <div class="help-pop" id="helpPop" role="tooltip">
+        <div class="hp-title">Как этим пользоваться</div>
+        <ul>
+          <li><b>Кто-то купил кофе</b> — внизу выбери, кто проставился и кому. Каждый выбранный будет должен по кружке.</li>
+          <li><b>Стрелка</b> идёт от должника к тому, кому он должен. Число в стаканчике — сколько кружек. Чем толще стрелка, тем больше долг.</li>
+          <li><b>Вернул кружку</b> — ткни в стрелку и нажми «Отдал кружку (−1)». Или кнопками −1/+1 в списке долгов.</li>
+          <li><b>Взаимные долги схлопываются:</b> если ты должен Юре 2, а Юра тебе 1 — останется одна стрелка на 1 кружку.</li>
+          <li><b>Счёт общий</b> — все видят одно и то же, обновляется само. Зелёная точка — всё синхронизировано.</li>
+        </ul>
+        <div class="hp-rule">Правило: кто зажал кружку дольше месяца — покупает две ☕</div>
+      </div>
+    </span>
+  </div>
+</header>
+
+<div class="stage">
+  <svg id="wheel" viewBox="0 0 600 600" role="img" aria-label="Схема кофейных долгов"></svg>
+  <div class="empty-hint" id="emptyHint" hidden><span>долгов нет — все квиты 🎉</span></div>
+  <div class="popover" id="popover" hidden></div>
+</div>
+
+<div class="panel">
+  <h2>Кто-то проставился</h2>
+  <div class="row">
+    <span class="lbl">Кто купил кофе:</span>
+    <div id="buyerChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+  <div class="row">
+    <span class="lbl">Кому (можно нескольким — каждый будет должен по кружке):</span>
+    <div id="drinkerChips" style="display:flex;flex-wrap:wrap;gap:8px"></div>
+  </div>
+  <button class="btn btn-main" id="addDebtBtn" disabled>Записать долг</button>
+</div>
+
+<div class="debts">
+  <h2>Все долги</h2>
+  <div id="debtList"></div>
+</div>
+
+<div class="people-manage">
+  <h2>Участники</h2>
+  <div class="add-row">
+    <input id="newName" type="text" placeholder="Имя нового человека" maxlength="24">
+    <button class="btn btn-ghost" id="addPersonBtn">Добавить</button>
+  </div>
+  <div class="people-list" id="peopleList"></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+(function(){
+  'use strict';
+
+  /* ---------- общий счётчик через Cloudflare Worker ---------- */
+  // ↓↓↓ вставь сюда URL своего воркера ↓↓↓
+  var API = 'https://coffeinye-dolzhniki.salazyrian.workers.dev/state';
+
+  var dirty = false; // есть несинхронизированные изменения
+
+  function cacheLoad(){
+    try{
+      var raw = localStorage.getItem('coffee-debts-v1');
+      if(raw) return JSON.parse(raw);
+    }catch(e){}
+    return null;
+  }
+  function cacheSave(st){
+    try{ localStorage.setItem('coffee-debts-v1', JSON.stringify(st)); }catch(e){}
+  }
+
+  function setSync(status){ // 'ok' | 'busy' | 'err'
+    var d = document.getElementById('syncDot');
+    if(d) d.dataset.s = status;
+  }
+
+  function adoptServerState(srv){
+    state = srv;
+    cacheSave(state);
+    renderAll();
+  }
+
+  function pull(){
+    setSync('busy');
+    return fetch(API).then(function(r){ return r.json(); }).then(function(srv){
+      setSync('ok');
+      if(srv && (srv.rev||0) > (state.rev||0)) adoptServerState(srv);
+      else if(!srv && !dirty){ dirty = true; push(); } // сервер пустой — зальём стартовое
+    }).catch(function(){ setSync('err'); });
+  }
+
+  function push(){
+    setSync('busy');
+    return fetch(API, {
+      method:'PUT',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify(state)
+    }).then(function(r){
+      if(r.status === 409){
+        return r.json().then(function(srv){
+          dirty = false;
+          adoptServerState(srv);
+          setSync('ok');
+          toast('Кто-то обновил данные раньше — синхронизировал, повтори действие');
+        });
+      }
+      if(!r.ok) throw 0;
+      dirty = false;
+      setSync('ok');
+    }).catch(function(){ setSync('err'); /* dirty остаётся, дожмём при следующем тике */ });
+  }
+
+  // вызывается после каждой мутации
+  function save(st){
+    st.rev = (st.rev||0) + 1;
+    cacheSave(st);
+    dirty = true;
+    push();
+  }
+
+  var state = cacheLoad() || {
+    nextId: 4,
+    people: [
+      {id:1, name:'Юра'},
+      {id:2, name:'Ваня Принц'},
+      {id:3, name:'Илюха Г.'}
+    ],
+    debts: {} // ключ "должникId>кредиторId" → число кружек (всегда > 0)
+  };
+
+  var selBuyer = null;
+  var selDrinkers = [];
+
+  /* ---------- утилиты ---------- */
+  function person(id){ return state.people.find(function(p){return p.id===id}); }
+  function initials(name){
+    return name.trim().split(/\s+/).map(function(w){return w[0]}).slice(0,2).join('').toUpperCase();
+  }
+  function key(a,b){ return a+'>'+b; }
+
+  // добавить n кружек долга: from должен to; взаимные долги схлопываются
+  function addDebt(from, to, n){
+    var rev = key(to, from);
+    var revVal = state.debts[rev] || 0;
+    if(revVal > 0){
+      var cancel = Math.min(revVal, n);
+      revVal -= cancel; n -= cancel;
+      if(revVal > 0) state.debts[rev] = revVal; else delete state.debts[rev];
+    }
+    if(n > 0){
+      var k = key(from, to);
+      state.debts[k] = (state.debts[k] || 0) + n;
+    }
+    save(state); renderAll();
+  }
+  function reduceDebt(from, to, n){
+    var k = key(from, to);
+    if(!state.debts[k]) return;
+    state.debts[k] -= n;
+    if(state.debts[k] <= 0) delete state.debts[k];
+    save(state); renderAll();
+  }
+  function clearDebt(from, to){
+    delete state.debts[key(from,to)];
+    save(state); renderAll();
+  }
+
+  function toast(msg){
+    var t = document.getElementById('toast');
+    t.textContent = msg;
+    t.classList.add('show');
+    clearTimeout(t._tm);
+    t._tm = setTimeout(function(){ t.classList.remove('show'); }, 2200);
+  }
+
+  /* ---------- SVG круговорот ---------- */
+  var svg = document.getElementById('wheel');
+  var NS = 'http://www.w3.org/2000/svg';
+  var nodePos = {};
+
+  function el(tag, attrs, children){
+    var e = document.createElementNS(NS, tag);
+    for(var k in attrs) e.setAttribute(k, attrs[k]);
+    (children||[]).forEach(function(c){ e.appendChild(c); });
+    return e;
+  }
+  function txt(tag, attrs, content){
+    var e = el(tag, attrs);
+    e.textContent = content;
+    return e;
+  }
+
+  function cupNode(x, y, name){
+    var g = el('g', {class:'node', transform:'translate('+x+','+y+')'});
+    // стаканчик
+    g.appendChild(el('path', {class:'cupbody', d:'M -18 -12 L 18 -12 L 13 26 L -13 26 Z'}));
+    g.appendChild(el('rect', {class:'cuplid', x:-22, y:-20, width:44, height:8, rx:3}));
+    g.appendChild(txt('text', {class:'initials', y:12}, initials(name)));
+    g.appendChild(txt('text', {class:'name', y:52}, name));
+    return g;
+  }
+
+  function drawWheel(){
+    while(svg.firstChild) svg.removeChild(svg.firstChild);
+    nodePos = {};
+
+    var defs = el('defs');
+    var marker = el('marker', {id:'arrow', viewBox:'0 0 10 10', refX:9, refY:5,
+      markerWidth:7, markerHeight:7, orient:'auto-start-reverse'});
+    marker.appendChild(el('path', {d:'M 0 0 L 10 5 L 0 10 z', fill:'var(--copper)'}));
+    defs.appendChild(marker);
+    var markerHover = el('marker', {id:'arrowMilk', viewBox:'0 0 10 10', refX:9, refY:5,
+      markerWidth:7, markerHeight:7, orient:'auto-start-reverse'});
+    markerHover.appendChild(el('path', {d:'M 0 0 L 10 5 L 0 10 z', fill:'var(--milk)'}));
+    defs.appendChild(markerHover);
+    svg.appendChild(defs);
+
+    var cx = 300, cy = 290, R = 215;
+    var n = state.people.length;
+
+    // позиции узлов
+    state.people.forEach(function(p, i){
+      var a = -Math.PI/2 + i * 2*Math.PI/n;
+      nodePos[p.id] = { x: cx + R*Math.cos(a), y: cy + R*Math.sin(a) };
+    });
+
+    // рёбра-долги
+    var edgeLayer = el('g');
+    svg.appendChild(edgeLayer);
+    var keys = Object.keys(state.debts);
+    keys.forEach(function(k){
+      var parts = k.split('>');
+      var from = +parts[0], to = +parts[1];
+      var cnt = state.debts[k];
+      var A = nodePos[from], B = nodePos[to];
+      if(!A || !B) return;
+
+      // укорачиваем, чтобы не влезать в стаканчики
+      var dx = B.x - A.x, dy = B.y - A.y;
+      var len = Math.hypot(dx, dy) || 1;
+      var pad = 52;
+      var ax = A.x + dx/len*pad, ay = A.y + dy/len*pad;
+      var bx = B.x - dx/len*pad, by = B.y - dy/len*pad;
+
+      // изгиб наружу от центра
+      var mx = (ax+bx)/2, my = (ay+by)/2;
+      var ox = mx - cx, oy = my - cy;
+      var olen = Math.hypot(ox, oy) || 1;
+      var bend = Math.min(46, 700/n + 10);
+      var qx = mx + ox/olen*bend, qy = my + oy/olen*bend;
+
+      var d = 'M '+ax+' '+ay+' Q '+qx+' '+qy+' '+bx+' '+by;
+      var w = Math.min(2 + cnt*0.9, 7);
+
+      var g = el('g', {class:'edge', tabindex:0, role:'button'});
+      g.setAttribute('aria-label', person(from).name+' должен '+person(to).name+': '+cnt);
+      g.appendChild(el('path', {class:'hit', d:d}));
+      var flow = el('path', {class:'flow', d:d, 'stroke-width':w, 'marker-end':'url(#arrow)'});
+      g.appendChild(flow);
+
+      // стаканчик-бейдж с числом на середине кривой
+      var tx = 0.25*ax + 0.5*qx + 0.25*bx;
+      var ty = 0.25*ay + 0.5*qy + 0.25*by;
+      var badge = el('g', {transform:'translate('+tx+','+ty+')'});
+      badge.appendChild(el('path', {class:'badge-cup', d:'M -14 -9 L 14 -9 L 10 20 L -10 20 Z'}));
+      badge.appendChild(el('rect', {class:'badge-lid', x:-17, y:-15, width:34, height:6, rx:2}));
+      badge.appendChild(txt('text', {class:'count', y:11, 'font-size': cnt>9?13:15}, cnt));
+      g.appendChild(badge);
+
+      g.addEventListener('click', function(ev){ openPopover(ev, from, to); });
+      g.addEventListener('keydown', function(ev){
+        if(ev.key==='Enter'||ev.key===' '){ ev.preventDefault(); openPopover(ev, from, to); }
+      });
+      g.addEventListener('mouseenter', function(){ flow.setAttribute('marker-end','url(#arrowMilk)'); });
+      g.addEventListener('mouseleave', function(){ flow.setAttribute('marker-end','url(#arrow)'); });
+      edgeLayer.appendChild(g);
+    });
+
+    // узлы поверх рёбер
+    state.people.forEach(function(p){
+      var pos = nodePos[p.id];
+      svg.appendChild(cupNode(pos.x, pos.y, p.name));
+    });
+
+    document.getElementById('emptyHint').hidden = keys.length > 0;
+  }
+
+  /* ---------- попап по стрелке ---------- */
+  var pop = document.getElementById('popover');
+  function openPopover(ev, from, to){
+    ev.stopPropagation();
+    var f = person(from).name, t = person(to).name;
+    var cnt = state.debts[key(from,to)] || 0;
+    pop.innerHTML = '';
+    var title = document.createElement('div');
+    title.className = 'pv-title';
+    title.textContent = f+' должен '+t+': '+cnt+' '+cupsWord(cnt);
+    pop.appendChild(title);
+    var btns = document.createElement('div');
+    btns.className = 'pv-btns';
+    btns.appendChild(pvBtn('✅ Отдал кружку (−1)', function(){ reduceDebt(from,to,1); toast(f+' вернул кружку'); }));
+    btns.appendChild(pvBtn('☕ Ещё кружку (+1)', function(){ addDebt(from,to,1); }));
+    btns.appendChild(pvBtn('🧹 Обнулить долг', function(){ clearDebt(from,to); toast('Долг '+f+' → '+t+' списан'); }, 'zero'));
+    pop.appendChild(btns);
+
+    var stage = document.querySelector('.stage');
+    var r = stage.getBoundingClientRect();
+    pop.hidden = false;
+    var x = ev.clientX - r.left, y = ev.clientY - r.top;
+    // не вылезать за край
+    var pw = pop.offsetWidth, ph = pop.offsetHeight;
+    x = Math.max(4, Math.min(x, r.width - pw - 4));
+    y = Math.max(4, Math.min(y, r.height - ph - 4));
+    pop.style.left = x+'px';
+    pop.style.top = y+'px';
+  }
+  function pvBtn(label, fn, cls){
+    var b = document.createElement('button');
+    b.textContent = label;
+    if(cls) b.className = cls;
+    b.addEventListener('click', function(e){ e.stopPropagation(); pop.hidden = true; fn(); });
+    return b;
+  }
+  document.addEventListener('click', function(){ pop.hidden = true; });
+  document.addEventListener('keydown', function(e){ if(e.key==='Escape') pop.hidden = true; });
+
+  /* ---------- панель «кто-то проставился» ---------- */
+  function renderChips(){
+    var bWrap = document.getElementById('buyerChips');
+    var dWrap = document.getElementById('drinkerChips');
+    bWrap.innerHTML = ''; dWrap.innerHTML = '';
+    state.people.forEach(function(p){
+      var b = document.createElement('button');
+      b.className = 'chip' + (selBuyer===p.id ? ' on-buyer':'');
+      b.textContent = p.name;
+      b.addEventListener('click', function(){
+        selBuyer = (selBuyer===p.id) ? null : p.id;
+        selDrinkers = selDrinkers.filter(function(id){return id!==selBuyer});
+        renderChips();
+      });
+      bWrap.appendChild(b);
+
+      var d = document.createElement('button');
+      var on = selDrinkers.indexOf(p.id) !== -1;
+      d.className = 'chip' + (on ? ' on-drinker':'');
+      d.textContent = p.name;
+      d.disabled = (selBuyer===p.id);
+      d.addEventListener('click', function(){
+        var i = selDrinkers.indexOf(p.id);
+        if(i===-1) selDrinkers.push(p.id); else selDrinkers.splice(i,1);
+        renderChips();
+      });
+      dWrap.appendChild(d);
+    });
+    document.getElementById('addDebtBtn').disabled = !(selBuyer && selDrinkers.length);
+  }
+
+  document.getElementById('addDebtBtn').addEventListener('click', function(){
+    if(!selBuyer || !selDrinkers.length) return;
+    var buyerName = person(selBuyer).name;
+    selDrinkers.forEach(function(id){ addDebt(id, selBuyer, 1); });
+    toast(buyerName + ' проставился — записано ☕');
+    selDrinkers = [];
+    renderChips();
+  });
+
+  /* ---------- список долгов ---------- */
+  function cupsWord(n){
+    var m10 = n%10, m100 = n%100;
+    if(m10===1 && m100!==11) return 'кружка';
+    if(m10>=2 && m10<=4 && (m100<12||m100>14)) return 'кружки';
+    return 'кружек';
+  }
+  function renderDebtList(){
+    var box = document.getElementById('debtList');
+    box.innerHTML = '';
+    var keys = Object.keys(state.debts);
+    if(!keys.length){
+      var d = document.createElement('div');
+      d.className = 'no-debts';
+      d.textContent = 'Пока никто никому не должен.';
+      box.appendChild(d);
+      return;
+    }
+    keys.sort(function(a,b){ return state.debts[b]-state.debts[a]; });
+    keys.forEach(function(k){
+      var parts = k.split('>');
+      var from = +parts[0], to = +parts[1], cnt = state.debts[k];
+      var line = document.createElement('div');
+      line.className = 'debt-line';
+      var who = document.createElement('div');
+      who.className = 'who';
+      who.innerHTML = '<b></b> должен <b></b>';
+      who.querySelectorAll('b')[0].textContent = person(from).name;
+      who.querySelectorAll('b')[1].textContent = person(to).name;
+      var cups = document.createElement('div');
+      cups.className = 'cups';
+      cups.textContent = cnt+' '+cupsWord(cnt)+' ☕';
+      var minus = document.createElement('button');
+      minus.className = 'mini'; minus.textContent = '−1';
+      minus.title = 'Отдал кружку';
+      minus.setAttribute('aria-label','Минус одна кружка');
+      minus.addEventListener('click', function(){ reduceDebt(from,to,1); });
+      var plus = document.createElement('button');
+      plus.className = 'mini'; plus.textContent = '+1';
+      plus.title = 'Ещё кружку';
+      plus.setAttribute('aria-label','Плюс одна кружка');
+      plus.addEventListener('click', function(){ addDebt(from,to,1); });
+      line.appendChild(who); line.appendChild(cups); line.appendChild(minus); line.appendChild(plus);
+      box.appendChild(line);
+    });
+  }
+
+  /* ---------- участники ---------- */
+  function renderPeople(){
+    var list = document.getElementById('peopleList');
+    list.innerHTML = '';
+    state.people.forEach(function(p){
+      var tag = document.createElement('span');
+      tag.className = 'person-tag';
+      var nm = document.createElement('span');
+      nm.textContent = p.name;
+      var del = document.createElement('button');
+      del.textContent = '✕';
+      del.title = 'Удалить';
+      del.setAttribute('aria-label','Удалить '+p.name);
+      del.addEventListener('click', function(){ removePerson(p.id); });
+      tag.appendChild(nm); tag.appendChild(del);
+      list.appendChild(tag);
+    });
+  }
+
+  document.getElementById('addPersonBtn').addEventListener('click', addPersonFromInput);
+  document.getElementById('newName').addEventListener('keydown', function(e){
+    if(e.key==='Enter') addPersonFromInput();
+  });
+  function addPersonFromInput(){
+    var inp = document.getElementById('newName');
+    var name = inp.value.trim();
+    if(!name) return;
+    if(state.people.some(function(p){return p.name.toLowerCase()===name.toLowerCase()})){
+      toast('Такой человек уже есть');
+      return;
+    }
+    state.people.push({id: state.nextId++, name: name});
+    inp.value = '';
+    save(state); renderAll();
+    toast(name+' в деле ☕');
+  }
+
+  function removePerson(id){
+    var hasDebts = Object.keys(state.debts).some(function(k){
+      var parts = k.split('>');
+      return +parts[0]===id || +parts[1]===id;
+    });
+    var name = person(id).name;
+    if(hasDebts && !confirm('У '+name+' есть незакрытые долги. Удалить вместе с долгами?')) return;
+    state.people = state.people.filter(function(p){return p.id!==id});
+    Object.keys(state.debts).forEach(function(k){
+      var parts = k.split('>');
+      if(+parts[0]===id || +parts[1]===id) delete state.debts[k];
+    });
+    if(selBuyer===id) selBuyer=null;
+    selDrinkers = selDrinkers.filter(function(d){return d!==id});
+    save(state); renderAll();
+  }
+
+  /* ---------- общий рендер ---------- */
+  function renderAll(){
+    drawWheel();
+    renderChips();
+    renderDebtList();
+    renderPeople();
+  }
+  /* ---------- кнопка «как это работает» (тап на мобиле) ---------- */
+  var helpBtn = document.getElementById('helpBtn');
+  var helpPop = document.getElementById('helpPop');
+  helpBtn.addEventListener('click', function(e){
+    e.stopPropagation();
+    var open = helpPop.classList.toggle('open');
+    helpBtn.setAttribute('aria-expanded', open);
+  });
+  document.addEventListener('click', function(e){
+    if(!helpPop.contains(e.target)){
+      helpPop.classList.remove('open');
+      helpBtn.setAttribute('aria-expanded','false');
+    }
+  });
+
+  renderAll();
+
+  // первичная загрузка с сервера + поллинг: подтягиваем чужие изменения
+  pull();
+  setInterval(function(){
+    if(dirty) push(); else pull();
+  }, 8000);
+  document.addEventListener('visibilitychange', function(){
+    if(!document.hidden) pull();
+  });
+})();
+</script>
+</body>
+</html>
