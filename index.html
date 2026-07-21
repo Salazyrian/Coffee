@@ -114,6 +114,15 @@
     position:absolute;inset:0;display:flex;align-items:center;justify-content:center;
     pointer-events:none;
   }
+  .empty-hint[hidden]{display:none}
+
+  .settle{
+    width:100%;max-width:640px;text-align:center;
+    font-family:'Caveat',cursive;font-size:22px;line-height:1.5;
+    color:var(--crema-dim);margin:2px 0 6px;
+  }
+  .settle b{color:var(--copper);font-weight:700}
+  .settle[hidden]{display:none}
   .empty-hint span{
     font-family:'Caveat',cursive;font-size:28px;color:var(--crema-dim);
     background:rgba(36,26,19,.7);padding:8px 18px;border-radius:12px;
@@ -247,6 +256,8 @@
   <div class="popover" id="popover" hidden></div>
 </div>
 
+<div class="settle" id="settleLine" hidden></div>
+
 <div class="panel">
   <h2>Кто-то проставился</h2>
   <div class="row">
@@ -351,7 +362,7 @@
     people: [
       {id:1, name:'Юра'},
       {id:2, name:'Ваня Принц'},
-      {id:3, name:'Илюха Г.'}
+      {id:3, name:'Илюха Глотов'}
     ],
     debts: {} // ключ "должникId>кредиторId" → число кружек (всегда > 0)
   };
@@ -511,6 +522,27 @@
     });
 
     document.getElementById('emptyHint').hidden = keys.length > 0;
+
+    // строка «чтобы все были квиты»
+    var settle = document.getElementById('settleLine');
+    if(keys.length){
+      settle.hidden = false;
+      var parts2 = keys.map(function(k){
+        var p = k.split('>');
+        var cnt = state.debts[k];
+        return '<b></b> ставит кофе <b></b> ('+cnt+' '+cupsWord(cnt)+')';
+      });
+      settle.innerHTML = 'Чтобы все были квиты: ' + parts2.join(', ') + ' ☕';
+      // имена вставляем текстом, не HTML
+      var bolds = settle.querySelectorAll('b');
+      keys.forEach(function(k, i){
+        var p = k.split('>');
+        bolds[i*2].textContent = person(+p[0]).name;
+        bolds[i*2+1].textContent = person(+p[1]).name;
+      });
+    } else {
+      settle.hidden = true;
+    }
   }
 
   /* ---------- попап по стрелке ---------- */
@@ -648,6 +680,20 @@
       tag.className = 'person-tag';
       var nm = document.createElement('span');
       nm.textContent = p.name;
+      nm.style.cursor = 'pointer';
+      nm.title = 'Нажми, чтобы переименовать';
+      nm.addEventListener('click', function(){
+        var nn = prompt('Новое имя:', p.name);
+        if(!nn) return;
+        nn = nn.trim();
+        if(!nn || nn === p.name) return;
+        if(state.people.some(function(q){return q.id!==p.id && q.name.toLowerCase()===nn.toLowerCase()})){
+          toast('Такое имя уже занято');
+          return;
+        }
+        p.name = nn;
+        save(state); renderAll();
+      });
       var del = document.createElement('button');
       del.textContent = '✕';
       del.title = 'Удалить';
